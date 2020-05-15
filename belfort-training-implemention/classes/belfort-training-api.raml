@@ -1,0 +1,143 @@
+#%RAML 1.0
+baseUri: https://anypoint.mulesoft.com/mocking/api/v1/links/58f9cc55-8e01-423e-98f0-4c2355224661/ # 
+version: v1
+title: Belfort Training API
+
+types:
+  user: !include datatypes/user-datatype.raml
+  userNoID: !include datatypes/user-noID-datatype.raml
+  course: !include datatypes/courses-datatype.raml
+
+/user:
+  get:
+    headers:
+      Requester-ID:
+        type: string
+        required: true
+    queryParameters:
+      account:
+        required: false
+        type: string
+        enum: ['regular','premium']
+    responses:
+      200:
+        body:
+          application/json:
+            type: user[]
+            example: !include examples/users-many-example.raml
+      400:
+        body:
+          application/json:
+            example:
+              message: Something went wrong. Please contact your administrator.
+    
+  post:
+    headers:
+      Requester-ID:
+        type: string
+        required: true
+    body:
+      application/json:
+        type: userNoID[]
+        example: !include examples/users-many-noID-example.raml
+    responses:
+      201:
+        body:
+          application/json:
+            example:
+              message: Users have been successfully updated
+      400:
+        body:
+          application/json:
+            example:
+              message: Something went wrong. Please contact your administrator.
+
+  /{ID}:
+    get:
+      headers:
+        Requester-ID:
+          type: string
+          required: true
+      responses:
+        200:
+          body:
+            application/json:
+              type: user
+              example: !include examples/user-single-example.raml
+        400:
+          body:
+            application/json:
+              example:
+                message: Something went wrong. Please contact your administrator.
+        404:
+          body:
+            application/json:
+              example:
+                message: User not found.
+
+    delete:
+      headers:
+        Requester-ID:
+          type: string
+          required: true
+      responses:
+        200:
+          body:
+            application/json:
+              example:
+                message: User with ID 44 has been successfully removed.
+        400:
+          body:
+            application/json:
+              example:
+                message: Something went wrong. Please contact your administrator.
+        404:
+          body:
+            application/json:
+              example:
+                message: User not found.
+    put:
+      headers:
+        Requester-ID:
+          type: string
+          required: true
+      body:
+        application/json:
+          type: userNoID[]
+          example: !include examples/users-many-noID-example.raml
+      responses:
+        200:
+          body:
+            application/json:
+              example:
+                message: User has been successfully updated.
+        400:
+          body:
+            application/json:
+              example:
+                message: Something went wrong. Please contact your administrator.  
+
+
+
+/courses:
+  get:
+    headers:
+        Requester-ID:
+          type: string
+          required: true
+    queryParameters:
+      id:
+        type: integer
+        required: false
+    responses:
+      200:
+        body:
+          application/json:
+            type: course
+            example: !include examples/courses-many-example.raml
+      400:
+        body:
+          application/json:
+            example:
+              message: Something went wrong. Please contact your administrator.
+    

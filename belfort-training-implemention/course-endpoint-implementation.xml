@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+    <flow name="getCourses">
+        <set-variable variableName="courseid" value="#[message.inboundProperties.'http.query.params'.id]" doc:name="set-courseid-flow-var"/>
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.courseid == null]">
+                <http:request config-ref="Belfort_external_courses_HTTP_Request_Configuration" path="/belfort/courses/external" method="GET" doc:name="REST call to get all external courses"/>
+                <dw:transform-message doc:name="Transform Message" metadata:id="f77e59ce-35c2-4d72-8f19-01cb5f6bcce4">
+                    <dw:input-payload mimeType="application/json"/>
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	courses: payload map ((payload01 , indexOfPayload01) -> {
+		id: payload01.ID,
+		name: payload01.course_name,
+		hours: payload01.learning_hours,
+		poc: payload01.point_of_contact
+	})
+}]]></dw:set-payload>
+                </dw:transform-message>
+            </when>
+            <otherwise>
+                <http:request config-ref="Belfort_external_courses_HTTP_Request_Configuration" path="/belfort/courses/external/{ID}" method="GET" doc:name="REST call to get courses by id">
+                    <http:request-builder>
+                        <http:uri-param paramName="ID" value="#[flowVars.courseid]"/>
+                    </http:request-builder>
+                </http:request>
+                <dw:transform-message doc:name="Transform Message" metadata:id="75d1552b-ac0f-4957-ae6b-6bfe6f95dbe6">
+                    <dw:input-payload mimeType="application/json"/>
+                    <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	courses: [{
+		id: payload.ID,
+		name: payload.course_name,
+		hours: payload.learning_hours,
+		poc: payload.point_of_contact
+	}]
+}]]></dw:set-payload>
+                </dw:transform-message>
+            </otherwise>
+        </choice>
+        <logger level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:cluster="http://www.mulesoft.org/schema/mule/ee/cluster" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:context="http://www.springframework.org/schema/context" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-current.xsd">
+	<context:property-placeholder location="belfort-dev.properties" />
+	<http:request-config
+		name="Belfort_external_courses_HTTP_Request_Configuration" doc:name="HTTP Request Configuration" host="${rest.host}" port="${rest.port}"/>
+
+	<http:listener-config name="HTTP_Listener_Configuration1"
+		host="0.0.0.0" port="9911" doc:name="HTTP Listener Configuration" />
+    <http:request-config name="getUsersId_REST_API_HTTP_Request_Configuration" host="localhost" port="9911" doc:name="HTTP Request Configuration"/>
+    <http:request-config name="getCourses_REST_HTTP_Request_Configuration" host="localhost" port="9911" doc:name="HTTP Request Configuration"/>
+    <configuration defaultExceptionStrategy-ref="globalChoice_Exception_Strategy" doc:name="Configuration">
+        <http:config useTransportForUris="false"/>
+    </configuration>
+    <choice-exception-strategy name="globalChoice_Exception_Strategy">
+    	<catch-exception-strategy when="#[exception.causeMatches('org.mule.module.apikit.exception.NotFoundException')]" doc:name="404-user-not-found">
+                <set-payload value="{&quot;message&quot;: &quot;User not found.&quot;}" doc:name="Set Payload"/>
+                <set-property propertyName="http.status" value="404" doc:name="set-status-code-404"/>
+                <logger level="INFO" doc:name="Logger"/>
+        </catch-exception-strategy>
+        <catch-exception-strategy doc:name="400-something-went-wrong">
+            <set-payload value="{&quot;message&quot;:&quot;Something went wrong. Please contact your administrator.&quot;}" doc:name="Set Payload"/>
+            <set-property propertyName="http.status" value="400" doc:name="set-status-code-400"/>
+            <logger level="INFO" doc:name="Logger"/>
+        </catch-exception-strategy>
+    </choice-exception-strategy>
+
+
+
+</mule>

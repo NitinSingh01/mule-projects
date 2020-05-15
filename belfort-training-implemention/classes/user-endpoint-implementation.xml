@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:validation="http://www.mulesoft.org/schema/mule/validation" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+	<spring:beans>
+		<spring:bean id="DerbyDB" name="DerbyDB"
+			class="org.enhydra.jdbc.standard.StandardDataSource">
+			<spring:property name="driverName"
+				value="org.apache.derby.jdbc.ClientDriver" />
+			<spring:property name="url"
+				value="jdbc:derby://localhost:1527/memory:certification" />
+		</spring:bean>
+	</spring:beans>
+	<db:derby-config name="Derby_Configuration"
+		dataSource-ref="DerbyDB" doc:name="Derby Configuration" />
+    <flow name="getUsers" >
+        <set-variable variableName="acc" value="#[message.inboundProperties.'http.query.params'.account]" doc:name="set-acc-flow-var"/>
+        <choice doc:name="Choice">
+            <when expression="#[flowVars.acc == null]">
+                <db:select config-ref="Derby_Configuration" doc:name="getAllUsers">
+                    <db:parameterized-query><![CDATA[SELECT *
+FROM belfort_users]]></db:parameterized-query>
+                </db:select>
+            </when>
+            <otherwise>
+                <db:select config-ref="Derby_Configuration" doc:name="getUsersByAccount">
+                    <db:parameterized-query><![CDATA[SELECT *
+FROM belfort_users
+WHERE account = #[flowVars.acc]]]></db:parameterized-query>
+                </db:select>
+            </otherwise>
+        </choice>
+        <dw:transform-message doc:name="Transform Message" metadata:id="241aa43e-1838-4b49-8af2-fdb3c18bb303">
+            <dw:input-payload doc:sample="sample_data\list_map.dwl"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+payload map ((payload01 , indexOfPayload01) -> {
+	ID: payload01.USERID,
+	full_name: payload01.FIRST_NAME ++ " " ++ payload01.LAST_NAME,
+	location: payload01.CITY,
+	country: payload01.COUNTRY,
+	contact: payload01.PHONE,
+	email: payload01.EMAIL,
+	registration_date: payload01.REGISTRATION_DATE,
+	account: payload01.ACCOUNT
+})]]></dw:set-payload>
+        </dw:transform-message>
+        <logger level="INFO" doc:name="Logger"/>
+</flow>
+    <flow name="createNewUser">
+        <dw:transform-message doc:name="transform-for-db-insert">
+            <dw:input-payload doc:sample="user-many-NoID-details.json"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload map {
+	phone: $.contact,
+	country: $.country,
+	email: $.email,
+	city: $.location,
+	firstName: ($.full_name splitBy ' ')[0],
+	lastName: ($.full_name splitBy ' ')[1],
+	account: $.account
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <batch:execute name="user-insert-batch" doc:name="user-insert-batch"/>
+        <set-payload value="{&quot;message&quot;:&quot;Users have been successfully updated&quot;}" doc:name="Set Payload"/>
+    </flow>
+    <batch:job name="user-insert-batch">
+        <batch:process-records>
+            <batch:step name="Batch_Step1">
+                <set-variable variableName="email" value="#[payload.email]" doc:name="set-email-flow-var"/>
+                <enricher source="#[payload.size() &gt; 0]" target="#[recordVars.exists]" doc:name="Message Enricher">
+                    <db:select config-ref="Derby_Configuration" doc:name="sync-with-db">
+                        <db:parameterized-query><![CDATA[SELECT email 
+FROM belfort_users
+WHERE email = #[flowVars.email]]]></db:parameterized-query>
+                    </db:select>
+                </enricher>
+            </batch:step>
+            <batch:step name="Batch_Step" accept-expression="#[!recordVars.exists]">
+                <db:insert config-ref="Derby_Configuration" doc:name="insert-into-db">
+                    <db:parameterized-query><![CDATA[INSERT INTO belfort_users (first_name, last_name, city, country, phone, email, registration_date, account)
+VALUES (#[payload.firstName], #[payload.lastName], #[payload.city], #[payload.country], #[payload.phone], #[payload.email],#[server.dateTime.format("MM/dd/yyyy").toString()], #[payload.account])]]></db:parameterized-query>
+                </db:insert>
+            </batch:step>
+        </batch:process-records>
+    </batch:job>
+    <flow name="getUserById">
+        <db:select config-ref="Derby_Configuration" doc:name="getUsersById">
+            <db:parameterized-query><![CDATA[SELECT *
+FROM belfort_users
+WHERE userID = #[flowVars.ID]]]></db:parameterized-query>
+        </db:select>
+        <validation:is-number exceptionClass="org.mule.module.apikit.exception.NotFoundException" value="#[payload.size()]" minValue="1" numberType="INTEGER" doc:name="validate-user-retrieval"/>
+        <dw:transform-message doc:name="Transform Message" metadata:id="d5c26ee1-cf13-47c2-a719-39cdec476dcd">
+            <dw:input-payload doc:sample="sample_data\list_map_2.dwl"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	ID: payload[0].USERID,
+	full_name: payload[0].FIRST_NAME ++ " " ++ payload[0].LAST_NAME,
+	location: payload[0].CITY,
+	country: payload[0].COUNTRY,
+	contact: payload[0].PHONE,
+	email: payload[0].EMAIL,
+	registration_date: payload[0].REGISTRATION_DATE,
+	account: payload[0].ACCOUNT
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <logger level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="deleteUserById">
+        <db:delete config-ref="Derby_Configuration" doc:name="deleteUserById">
+            <db:parameterized-query><![CDATA[DELETE FROM
+belfort_users
+WHERE userID = #[flowVars.ID]]]></db:parameterized-query>
+        </db:delete>
+        <validation:is-number exceptionClass="org.mule.module.apikit.exception.NotFoundException" value="#[payload]" minValue="1" numberType="INTEGER" doc:name="validate-deletion"/>
+        <set-payload value="{ &quot;message&quot;:&quot;User with ID #[flowVars.ID] has been successfully removed.&quot;}" doc:name="Set Payload"/>
+        <logger level="INFO" doc:name="Logger"/>
+        
+    </flow>
+
+
+
+
+</mule>
